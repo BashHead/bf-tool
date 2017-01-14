@@ -55,14 +55,13 @@ mainmenu() {
 	elif [ "$choice" == "3" ]; then
 		> /usr/bin/bf-tools/output/password.txt
 		> /usr/bin/bf-tools/output/lastbssid.txt
-	
 	fi
 	mainmenu
 }
 
 bruteforce() {
 	header
-	echo "BRUTEFORCE:"https://github.com/BashH
+	echo "BRUTEFORCE:"
 	echo ""
 	echo "1)Common dictionary"
 	echo "2)Custom permutations"
