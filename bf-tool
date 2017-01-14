@@ -4,9 +4,18 @@ pkill -f aircrack-ng
 pkill -x aircrack-ng
 
 # First run
-if [ -f /usr/bin/bf-tools/firstrun ]; then
+if [ -f firstrun ]; then
 	echo 'export PATH=$PATH":/usr/bin"' >> ~/.profile
 	. ~/.profile
+	mkdir /usr/bin/bf-tools
+	mkdir /usr/bin/bf-tools/output
+	mkdir /usr/bin/bf-tools/dictionaries
+	mv names.txt /usr/bin/bf-tools/dictionaries/names.txt
+	mv README.md /usr/bin/bf-tools/README.md
+	mv LICENSE /usr/bin/bf-tools/LICENSE 
+	mv logo.txt /usr/bin/bf-tools/logo.txt
+	cp bf-tool usr/bin/bf-tools/bf-tool
+	rm bf-tool
 	ln -s /usr/bin/bf-tools/bf-tool /usr/bin/bf-tool
 	rm /usr/bin/bf-tools/firstrun
 	bf-tool
@@ -53,7 +62,7 @@ mainmenu() {
 
 bruteforce() {
 	header
-	echo "BRUTEFORCE:"
+	echo "BRUTEFORCE:"https://github.com/BashH
 	echo ""
 	echo "1)Common dictionary"
 	echo "2)Custom permutations"
@@ -464,4 +473,3 @@ checkpw(){
 ######## RUNTIME
 
 mainmenu
-
